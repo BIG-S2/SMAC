@@ -68,7 +68,7 @@ function [out] = SMAC_I (data,imagesize,options)
 run('init.m')
 % if a masking vector is predefined, set it as data.index
 %
-if  isfield(data,'index') ;
+if  isfield(data,'index')
     %     if islogical(data.index) && isvector(data.index)
     index=data.index;
 else
@@ -155,7 +155,7 @@ else
     tol = 10E-4;
 end
 
-if isfield(options,'lambda1');
+if isfield(options,'lambda1')
     if isvector(options.lambda1) && isnumeric(options.lambda1)
         lambda1pool = options.lambda1;
     else
@@ -167,7 +167,7 @@ else
 end
 
 
-if isfield(options,'lambda2');
+if isfield(options,'lambda2')
     if isvector(options.lambda2) && isnumeric(options.lambda2)
         lambda2pool = options.lambda2;
     else
@@ -178,14 +178,9 @@ else
     lambda2pool = 8.^(-3:3);
 end
 
-% if isfield(options, 'progress')
-%     if ~islogical(options.progress)
-%         %         warning('options.progress must be true or false. A default of false will be used here')
-%         options.progress = false;
-%     end
-% else
-%     options.progress = false;
-% end
+if ~isfield(options, 'progress')
+    options.progress = false;
+end
 
 
 
@@ -221,13 +216,12 @@ n_lambda2 = length(lambda2pool);
 
 
 acc_tune = zeros(n_lambda1,n_lambda2);
-tune_x = data.tune_x;
-tune_y = data.tune_y;
+run_time = acc_tune;
 
-load('y.mat');
+load('./utils/v1_update_solver.mat');
 b_opt = zeros((k-1)*(p+1),1);
 acc_opt = 0;
-for tune_i = 1:n_lambda1;
+for tune_i = 1:n_lambda1
     for tune_j = 1:n_lambda2
         %======================================================================
         % initialize the parameters
@@ -258,11 +252,15 @@ for tune_i = 1:n_lambda1;
         [B,bccb] = B_gen(lambda1,lambda2,d1,d2,d3,k);
         
         b = zeros((k-1)*(p+1),1);
-        if isfield(options, 'progress')
-            if options.progress
-                fprintf('Tuning Parameter: lambda1 = %2f and lambda2 = %2f\n',...
-                    lambda1,lambda2);
-            end
+        if options.progress
+            fprintf('Tuning Parameter: lambda1 = %2f and lambda2 = %2f\n',...
+                lambda1,lambda2);
+        end
+        
+        t0 = cputime;
+        if options.progress
+            fprintf('=================SMAC_I algorithm started====================\n')
+            fprintf('| Iter. |  lam_1  |  lam_2  | Tune Acc | Rel Ch. |   Time   |\n')
         end
         for t = 1:itmax
             tic;
@@ -280,10 +278,10 @@ for tune_i = 1:n_lambda1;
             %======================================================================
             
             C_v1=A*b+u1;
-            v1=(C_v1<-1).*(1+C_v1)+(ge(C_v1,-1)&le(C_v1,12)).*y(min(floor((abs(C_v1+1))*10^5)+1,1300001))...
+            v1=(C_v1<-1).*(1+C_v1)+(ge(C_v1,-1)&le(C_v1,12)).*v1_update_solver(min(floor((abs(C_v1+1))*10^5)+1,1300001))...
                 +(C_v1>12).*C_v1;
             %         v1(C_v1<-1,1)=1+C_v1(C_v1<-1);
-            %         v1((ge(C_v1,-1)&le(C_v1,12)),1)=y(floor((C_v1(ge(C_v1,-1)&le(C_v1,12))+1)*10^5)+1);
+            %         v1((ge(C_v1,-1)&le(C_v1,12)),1)=v1_update_solver(floor((C_v1(ge(C_v1,-1)&le(C_v1,12))+1)*10^5)+1);
             %         v1((C_v1>12))=C_v1(C_v1>12);
             %
             
@@ -343,19 +341,58 @@ for tune_i = 1:n_lambda1;
             %======================================================================
             
             rel_change = norm(b-b_old)/norm(b_old);
-            time_inner = toc;
-            if isfield(options,'progress')
-                if options.progress
-                    timer_iner = toc;
-                    fprintf('Iteration %4.0f/%4.0f\nTime elapsed = %2.2f\nRelative Change: %3.2f%%\n', t,itmax, time_inner,rel_change*100);
-                end
-            end
+            
             if rel_change  < tol
+                fprintf('================SMAC_I algorithm completed===================\n')
                 break
             end
+            [~,acc_new] = pred_ang(b,p,k,data.tune_x,data.tune_y);
+            acc_tune(tune_i,tune_j) = acc_new;
+            if options.progress
+                [~,train_acc] = pred_ang(b,p,k,data.train_x,data.train_y);
+                timer_iner = toc;
+                
+                fprintf('|')
+                str1 = sprintf('%7d',t);
+                fprintf(strjust(str1,'center'))
+                fprintf('|')
+                
+                fprintf(' %0.1e ',lambda1);
+                fprintf('|')
+                
+                fprintf(' %0.1e ',lambda2);
+                fprintf('|')
+                
+                if train_acc < 1
+                    fprintf('  %2.2f%%  ',floor(acc_new*100));
+                else
+                    fprintf('  %2.1f%%  ',floor(acc_new*100));
+                end
+                fprintf('|')
+                
+                if rel_change==Inf
+                    fprintf('   Inf   ');
+                else
+                    fprintf(' %0.1e ',rel_change);
+                end
+                fprintf('|')
+                
+                if timer_iner>1
+                    str2 = sprintf('%10d',timer_iner);
+                else
+                    str2 = fprintf(' %0.2f ',timer_iner);
+                    
+                end
+                fprintf(strjust(str2,'center'))
+                fprintf('|\n')
+                
+            end
+            
+            if t == itmax
+                fprintf('================  Algorithm Not converged ===================\n')
+                fprintf('Rel. Change: %.3f\n', rel_change)
+            end
         end
-        [~,acc_new] = pred_ang(b,p,k,tune_x,tune_y);
-        acc_tune(tune_i,tune_j) = acc_new;
         %======================================================================
         % Using the last solution as the initial for next update.
         %======================================================================
@@ -363,18 +400,14 @@ for tune_i = 1:n_lambda1;
             b_opt = b;
             acc_opt = acc_new;
         end
-        if isfield(options,'progress')
-            if options.progress
-                timer_iner = toc;
-                %fprintf('Time elapsed = %2f\nTuning Accuracy: %3.2f%%\nBest Tuned Accuray: %3.2f%%\n', timer_iner,acc_new*100,acc_opt*100);
-                fprintf('Tuning Accuracy: %3.2f%%\nBest Tuned Accuray: %3.2f%%\n',acc_new*100,acc_opt*100);
-            end
-        end
+        
+        run_time(tune_i,tune_j) = cputime-t0;
     end
 end
 
 
 out.tune_acc = acc_tune;
+out.time = run_time;
 
 [max_row, max_col] = find(ismember(out.tune_acc, max(out.tune_acc(:))));
 [~,loc] = max(max_row+max_col);
@@ -391,8 +424,4 @@ end
 for i = 1:(k-1)
     eval( sprintf('out.coef_%d = reshape(temp_coef(((i-1)*(p_org+1)+2):i*(p_org+1)),imgsize);',i));
 end
-
-[out.pred_y,out.test_acc,out.conf] = pred_ang(out.b,size(data.test_x,2),data.k,data.test_x,data.test_y);
-
-
-
+[out.pred_y,out.test_acc,out.conf,out.prob] = pred_ang(out.b, p, data.k, data.test_x, data.test_y);

@@ -4,17 +4,17 @@
 clearvars;clc;close all;
 
 %% Load the image data file.
-load SIM1_FLAC.mat
+load SMAC_Classification_Data.mat
 
 %% Assign the class label accordingly.
 Y = [ones(30,1);ones(30,1)*2]; % Class labels must be from 1 to K.
 
 %% Assign the training, tuning and testing data set.
-data.train_x = SIM1.train; % train images, n by p
+data.train_x = trainx; % train images, n by p
 data.train_y = Y; % train labels, n by 1
-data.tune_x = SIM1.tune; % tune images, n by p
+data.tune_x = tunex; % tune images, n by p
 data.tune_y = Y; % tune labels, n by 1
-data.test_x = SIM1.test; % test images, n by p
+data.test_x = testx; % test images, n by p
 data.test_y =  [ones(300,1);ones(300,1)*2]; % test labels, n by 1
 
 %% Assign the index vector.
@@ -32,7 +32,7 @@ options.itmax=1000;  % Max iteration, default is 500.
 options.rho=1; % Lagrangian parameter, default is 1.
 options.l1flag =0; % Indicator of penalizing intercept. Default is 0.
 options.tol=5E-4; % Tolerance for the convergence of the algorithm. Default is 10E-4.
-options.progress = false; % Display the tuning progress. Default is false.
+options.progress = 1; % Display the tuning progress. Default is false.
 options.lambda1 = 2.^[-5:2:5]; % Penalty level for L1. Default is 8.^(-3:3);
 options.lambda2 = 2.^[-5:2:5]; % Penalty level for TV. Default is 8.^(-3:3);
 
@@ -64,8 +64,8 @@ end
 
 
 %% Plot the ROC curves and compute the AUC
-[AUC1] = ROC_analysis(data.test_y,data.test_x*out1.coef_1(:),1,'SMAC-I');
-[AUC2] = ROC_analysis(data.test_y,data.test_x*out2.coef_1(:),1,'SMAC-II');
+[AUC1] = ROC_analysis(data.test_y,data.test_x*out1.coef_1(:),1,1,'SMAC-I');
+[AUC2] = ROC_analysis(data.test_y,data.test_x*out2.coef_1(:),1,1,'SMAC-II');
 
 
 %====================================================%
